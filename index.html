@@ -966,6 +966,24 @@
 <img id="logo-blob" src="" alt="" style="display:none" />
 
 <script>
+
+async function testSheet() {
+  const out = document.getElementById('test-output');
+  out.textContent = 'CONNECTING...';
+  try {
+    const res  = await fetch(SHEET_URL);
+    const rows = await res.json();
+    const db   = await loadDelegates();
+    const keys = Object.keys(db);
+    out.innerHTML =
+      '✓ CONNECTED<br>' +
+      'DELEGATES FOUND: ' + keys.length + '<br>' +
+      'KEYS: ' + (keys.join(', ') || 'NONE YET');
+  } catch(e) {
+    out.textContent = '✗ FAILED: ' + e.message;
+  }
+}
+
 // ═══════════════════════════════════════════
 //  CONFIG
 // ═══════════════════════════════════════════
@@ -988,7 +1006,7 @@ const ADMIN_EMAIL         = 'neilchitnis022@gmail.com';
 const ADMIN_PASSWORD = 'Bambrolistanland69420';
 
 // ── Storage key ──
-const STORAGE_KEY = 'rvmun_delegates_v1';
+const SHEET_URL = 'https://sheetdb.io/api/v1/4q06wh6gw21r8';
 
 // ═══════════════════════════════════════════
 //  STATE
@@ -1017,13 +1035,21 @@ setLogoSrc(LOGO_SRC);
 //  DELEGATES DB  (localStorage)
 // ═══════════════════════════════════════════
 
-function loadDelegates() {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}; }
-  catch(e) { return {}; }
-}
-
-function saveDelegates(db) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+async function loadDelegates() {
+  const res   = await fetch(SHEET_URL);
+  const rows  = await res.json();
+  const db    = {};
+  rows.forEach(row => {
+    const key = String(row.KEY).trim().toUpperCase();
+    if (key && key !== 'UNDEFINED') {
+      db[key] = {
+        name:      String(row.NAME).trim(),
+        committee: String(row.COMMITTEE).trim(),
+        portfolio: String(row.PORTFOLIO).trim()
+      };
+    }
+  });
+  return db;
 }
 
 function generateKey() {
@@ -1110,21 +1136,25 @@ document.getElementById('access-key-input').addEventListener('keydown', e => {
 });
 
 // ─── DELEGATE LOGIN ───
-function handleDelegateLogin(key) {
-  const db = loadDelegates();
+async function handleDelegateLogin(key) {
   const keyUpper = key.toUpperCase();
-  const delegate = db[keyUpper];
-
-  if (!delegate) {
-    setError('login-error', 'INVALID ACCESS KEY — AUTHORIZATION DENIED');
-    return;
+  setError('login-error', 'CHECKING KEY...');
+  try {
+    const db = await loadDelegates();
+    const delegate = db[keyUpper];
+    if (!delegate) {
+      setError('login-error', 'INVALID ACCESS KEY — AUTHORIZATION DENIED');
+      return;
+    }
+    setError('login-error', '');
+    showDecrypting('DECRYPTING PORTFOLIO...', () => {
+      populatePassport(keyUpper, delegate);
+      showScreen('passport');
+    });
+  } catch(e) {
+    setError('login-error', 'CONNECTION ERROR — TRY AGAIN');
+    console.error(e);
   }
-
-  // Show decrypting screen then reveal passport
-  showDecrypting('DECRYPTING PORTFOLIO...', () => {
-    populatePassport(keyUpper, delegate);
-    showScreen('passport');
-  });
 }
 
 // ─── ADMIN LOGIN ───
